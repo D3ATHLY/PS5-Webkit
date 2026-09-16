@@ -234,8 +234,11 @@ if (portVal) {
     });
 }
 
-// Extract system software version
-const m = /PlayStation 5\/(\d+)\.(\d+)/.exec(navigator.userAgent);
+// Extract system software version - PS5 UA formats:
+// "Mozilla/5.0 (PlayStation 5; 13.20) AppleWebKit/..."
+// "Mozilla/5.0 (PlayStation 5 13.20) AppleWebKit/..."
+// "Mozilla/5.0 (PlayStation 5/13.20) AppleWebKit/..."
+const m = /PlayStation 5[\s\/;](\d+)\.(\d+)/.exec(navigator.userAgent);
 const fw = m ? `${m[1].padStart(2, "0")}.${m[2].padStart(2, "0")}` : null;
 
 // Block non-PS5 devices immediately

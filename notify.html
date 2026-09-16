@@ -433,7 +433,8 @@ let compositionError = null;
 const FW_LABEL = (function () {
     const p = Q.get("fw");
     if (p) return p;
-    const m = /PlayStation 5\/(\d+\.\d+)/.exec(navigator.userAgent);
+    // PS5 UA formats: "PlayStation 5; 13.20", "PlayStation 5 13.20", "PlayStation 5/13.20"
+    const m = /PlayStation 5[\s\/;](\d+\.\d+)/.exec(navigator.userAgent);
     return m ? m[1] : "??.??";
 })();
 
