@@ -448,16 +448,6 @@ function catState(cls) {
 
 setCaption(`PoC PS5 FW ${FW_LABEL}`);
 
-// Block non-PS5 devices
-if (FW_LABEL === "??.??") {
-    setCaption("Unsupported Device");
-    showStatus("This exploit only runs on PS5 Browser", "bad");
-    catState("bad");
-    document.getElementById("payload-manager").style.display = "none";
-    document.getElementById("target-info").style.display = "none";
-    return;
-}
-
 function screenLine(text) {
     screenLines.push(text.length > 110 ? `${text.slice(0, 107)}...` : text);
     if (screenLines.length > SCREEN_LINES)

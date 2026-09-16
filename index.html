@@ -241,15 +241,6 @@ if (portVal) {
 const m = /PlayStation 5[\s\/;](\d+)\.(\d+)/.exec(navigator.userAgent);
 const fw = m ? `${m[1].padStart(2, "0")}.${m[2].padStart(2, "0")}` : null;
 
-// Block non-PS5 devices immediately
-if (!fw) {
-    run.classList.add("disabled");
-    run.setAttribute("disabled", "true");
-    msg.innerHTML = `Unsupported device (<b style="color: #e74856;">Not a PS5 Browser</b>)`;
-    document.querySelector(".info-card").style.display = "none";
-    return;
-}
-
 let entry = null;
 
 function fwNum(s) {
