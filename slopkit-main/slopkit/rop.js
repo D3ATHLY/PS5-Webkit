@@ -572,3 +572,5 @@ class thread_rop extends rop {
         this.chain.add_syscall(455, this.thr_new_args, 0x68);
     }
 }
+
+export { rop, worker_rop, thread_rop };
