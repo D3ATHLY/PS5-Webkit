@@ -159,7 +159,6 @@ body {
     </div>
 </div>
 
-<script src="exploit_chain.js"></script>
 <script>
 "use strict";
 const OFFSETS_URL = "offsets/offsets.json";
@@ -476,51 +475,27 @@ async function runJailbreak() {
         return;
     }
 
-    jailbreak.classList.add("disabled", "running");
-    jailbreak.classList.remove("disabled");
+    const hc = Array.isArray(entry.hc) ? entry.hc.join(",") : entry.hc;
+    const params = new URLSearchParams();
+    params.set("go", "1");
+    params.set("auto", "1");
+    params.set("production", "1");
+    params.set("trigger", "netcontrol");
+    params.set("attempts", "8");
+    params.set("only", "ps0_preflight,ps1_prepare,ps3_stage0,ps4_validate,ps5_stage1,ps6_stage2,ps8_stage3,ps9_stage4,ps10_stage5");
+    params.set("log", "debug");
+    params.set("payload", "1");
+    params.set("v", "final");
+    if (hc) params.set("hc", hc);
+
     cat.className = "run";
-    msg.textContent = "Starting full exploit chain...";
+    msg.textContent = "Launching exploit... (page will navigate to exploit)";
     progress.textContent = "";
     updateStageBadge("webkit_uaf");
 
-    try {
-        const result = await ExploitChain.runFullExploitChain((type, stage, detail) => {
-            if (type === "stage") {
-                updateStageBadge(stage);
-                msg.textContent = detail;
-                progress.textContent = "";
-            } else if (type === "detail") {
-                progress.textContent = detail;
-            }
-        });
-
-        if (result.success) {
-            isJailbroken = true;
-            cat.className = "ok";
-            jailbreak.classList.remove("running");
-            jailbreak.textContent = "JAILBROKEN";
-            jailbreak.classList.add("disabled");
-            msg.textContent = "JAILBREAK COMPLETE! Payloads unlocked.";
-            progress.textContent = "";
-            updateStageBadge("complete");
-            updatePayloadsUI();
-            try { localStorage.setItem("ps5_jailbroken", "1"); } catch (e) {}
-        } else {
-            cat.className = "failed";
-            jailbreak.classList.remove("running");
-            jailbreak.classList.remove("disabled");
-            msg.textContent = `Jailbreak failed: ${result.error}`;
-            progress.textContent = "";
-            updateStageBadge("failed");
-        }
-    } catch (error) {
-        cat.className = "failed";
-        jailbreak.classList.remove("running");
-        jailbreak.classList.remove("disabled");
-        msg.textContent = `Error: ${error.message}`;
-        progress.textContent = "";
-        updateStageBadge("failed");
-    }
+    setTimeout(() => {
+        location.href = `slopkit-main/slopkit/poops.html?${params.toString()}`;
+    }, 500);
 }
 
 jailbreak.addEventListener("click", runJailbreak);
