@@ -94,13 +94,61 @@ body { user-select:none; -webkit-user-select:none; background-color:#0c0c0f; col
 </div>
 
 <script type="module">
-import { int64 } from './slopkit-main/slopkit/int64.js?v=final';
-import { establishPrimitive, releaseFakeCell, fakeCellReleased, carrierHeaderCopy, carrierHomeVector, profile, aimCarrier, restoreCarrier, plausibleAddress, plausibleCell } from './slopkit-main/slopkit/core.js?v=final';
-import { installWindowP, read1, read2, read4, read8, write1, write2, write4, write8, leakval, readInto, toI64, addrNumber } from './slopkit-main/slopkit/mem.js?v=final';
-import { rop, worker_rop, thread_rop } from './slopkit-main/slopkit/rop.js?v=final';
-import { SYS } from './slopkit-main/slopkit/syscalls.js?v=final';
-import * as offsets1360 from './slopkit-main/offsets/13.60.js?v=final';
-import { makePoopsEngine, BANNED, ERRNO, K, r32, r16, w32, hexBytes, coreList, PK, buildLadder, rthdrShape, makeTwinEngine, TWK } from './slopkit-main/slopkit/poops.js?v=final';
+let exploitModulesLoaded = false;
+let int64, establishPrimitive, releaseFakeCell, fakeCellReleased, carrierHeaderCopy, carrierHomeVector, profile, aimCarrier, restoreCarrier, plausibleAddress, plausibleCell;
+let installWindowP, read1, read2, read4, read8, write1, write2, write4, write8, leakval, readInto, toI64, addrNumber;
+let rop, worker_rop, thread_rop;
+let SYS;
+
+async function loadExploitModules() {
+    try {
+        const modInt64 = await import('./slopkit-main/slopkit/int64.js?v=final');
+        int64 = modInt64.int64;
+        
+        const modCore = await import('./slopkit-main/slopkit/core.js?v=final');
+        establishPrimitive = modCore.establishPrimitive;
+        releaseFakeCell = modCore.releaseFakeCell;
+        fakeCellReleased = modCore.fakeCellReleased;
+        carrierHeaderCopy = modCore.carrierHeaderCopy;
+        carrierHomeVector = modCore.carrierHomeVector;
+        profile = modCore.profile;
+        aimCarrier = modCore.aimCarrier;
+        restoreCarrier = modCore.restoreCarrier;
+        plausibleAddress = modCore.plausibleAddress;
+        plausibleCell = modCore.plausibleCell;
+        
+        const modMem = await import('./slopkit-main/slopkit/mem.js?v=final');
+        installWindowP = modMem.installWindowP;
+        read1 = modMem.read1;
+        read2 = modMem.read2;
+        read4 = modMem.read4;
+        read8 = modMem.read8;
+        write1 = modMem.write1;
+        write2 = modMem.write2;
+        write4 = modMem.write4;
+        write8 = modMem.write8;
+        leakval = modMem.leakval;
+        readInto = modMem.readInto;
+        toI64 = modMem.toI64;
+        addrNumber = modMem.addrNumber;
+        
+        const modRop = await import('./slopkit-main/slopkit/rop.js?v=final');
+        rop = modRop.rop;
+        worker_rop = modRop.worker_rop;
+        thread_rop = modRop.thread_rop;
+        
+        const modSyscalls = await import('./slopkit-main/slopkit/syscalls.js?v=final');
+        SYS = modSyscalls.SYS;
+        
+        exploitModulesLoaded = true;
+        log("Exploit modules loaded successfully", "log-ok");
+    } catch (err) {
+        log(`Module load failed (demo mode): ${err.message}`, "log-warn");
+        exploitModulesLoaded = false;
+    }
+}
+
+loadExploitModules();
 
 const OFFSETS_URL = "offsets/offsets.json";
 const DEFAULT_LISTENER_PORT = "9026";
@@ -264,6 +312,12 @@ fetch(OFFSETS_URL, { cache: "no-store" })
         else { msg.innerHTML = `firmware <b style="color: #ffffff; font-weight: bold;">${fw}</b> not supported`; }
     })
     .catch(function () { msg.textContent = "failed to load offsets (demo fallback active)"; entry = { hc: ["0x1e0d8", "0x1e320", "0x1f368"], gd: "0x1d11a", nt: "0x4740", gps: "0x34f57b8", gpe: "0x1b280", cls: "0x34f57a8", cle: "0x26e70", ers: "0x34f57b0", ere: "0xf340" }; jailbreak.classList.remove("disabled"); renderPayloadList(); });
+
+// Enable button immediately for demo mode (non-PS5)
+if (!fw) {
+    jailbreak.classList.remove("disabled");
+    msg.innerHTML = `Demo mode (<b style="color: #ffffff; font-weight: bold;">Standard Browser</b>)`;
+}
 
 function renderPayloadList() {
     payloadList.innerHTML = "";
@@ -574,6 +628,10 @@ async function verifyJailbreak() {
 }
 
 async function runFullExploitChain() {
+    if (!exploitModulesLoaded) {
+        throw new Error("Exploit modules not loaded");
+    }
+    
     exploitState.stage = "webkit_uaf";
     updateStageBadge("webkit_uaf");
     cat.className = "run";
@@ -641,6 +699,27 @@ async function runFullExploitChain() {
 jailbreak.addEventListener("click", async () => {
     if (isJailbroken) { msg.textContent = "Already jailbroken!"; return; }
     if (!entry) { msg.textContent = "Offsets not loaded yet."; return; }
+    
+    if (!fw) {
+        msg.textContent = "Demo mode: Exploit only runs on PS5 browser.";
+        log("Demo mode - exploit requires PS5 browser", "log-warn");
+        return;
+    }
+    
+    if (!exploitModulesLoaded) {
+        msg.textContent = "Loading exploit modules...";
+        log("Waiting for exploit modules to load...", "log-info");
+        for (let i = 0; i < 50; i++) {
+            await sleep(100);
+            if (exploitModulesLoaded) break;
+        }
+        if (!exploitModulesLoaded) {
+            msg.textContent = "Exploit modules failed to load. Check console.";
+            log("Exploit modules failed to load", "log-err");
+            return;
+        }
+    }
+    
     jailbreak.classList.add("disabled", "running");
     await runFullExploitChain();
 });
