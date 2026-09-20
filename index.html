@@ -47,7 +47,46 @@ body {
 }
 .btn:hover:not(.disabled) { background-color:#a2a2a6; color:#202020; }
 .btn.disabled { opacity:0.4; pointer-events:none; }
+.btn.secondary { background-color:#1a1a2e; }
+.btn.secondary:hover:not(.disabled) { background-color:#4f7fd6; color:#fff; }
 #msg { color:#888; font-size:0.8rem; margin-top:14px; min-height:1.2em; text-align: center; }
+.btn-group { display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+.modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center;
+    z-index: 1000; padding: 20px;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+    background: #16161e; border: 1px solid #2a2a35; border-radius: 16px;
+    padding: 24px; max-width: 500px; width: 100%; max-height: 80vh; overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.modal h2 { color: #00e5ff; margin: 0 0 16px; text-align: center; font-size: 1.5rem; }
+.payload-list { display: flex; flex-direction: column; gap: 10px; }
+.payload-item {
+    display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+    background: #20212f; border: 1px solid #3a3a4d; border-radius: 10px;
+    cursor: pointer; transition: all 0.2s ease;
+}
+.payload-item:hover { background: #2a2b3d; border-color: #4f7fd6; }
+.payload-icon { font-size: 1.8rem; width: 48px; text-align: center; }
+.payload-info { flex: 1; }
+.payload-name { color: #fff; font-weight: 700; font-size: 1.1rem; margin-bottom: 4px; }
+.payload-desc { color: #8a8a9e; font-size: 0.85rem; }
+.payload-btn {
+    padding: 8px 16px; background: #00e5ff; color: #121216; border: none;
+    border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer;
+    transition: background 0.2s;
+}
+.payload-btn:hover { background: #66ffb3; }
+.payload-btn.sending { background: #ffab00; cursor: wait; }
+.close-modal {
+    width: 100%; margin-top: 16px; padding: 12px; background: #2a2a35;
+    color: #fff; border: 1px solid #4f7fd6; border-radius: 8px;
+    font-weight: 700; cursor: pointer; font-size: 1rem;
+}
+.close-modal:hover { background: #4f7fd6; }
 </style>
 </head>
 <body>
@@ -65,8 +104,19 @@ body {
     </div>
 </div>
 
-<a tabindex="0" class="btn disabled" id="run">RUN</a>
+<div class="btn-group">
+    <a tabindex="0" class="btn disabled" id="jailbreak">JAILBREAK</a>
+    <a tabindex="0" class="btn secondary disabled" id="payloads-btn">PAYLOADS</a>
+</div>
 <div id="msg"></div>
+
+<div class="modal-overlay" id="payload-modal">
+    <div class="modal">
+        <h2>Built-in Payloads</h2>
+        <div class="payload-list" id="payload-list"></div>
+        <button class="close-modal" id="close-modal">Close</button>
+    </div>
+</div>
 
 <script>
 "use strict";
@@ -74,10 +124,27 @@ const EXPLOIT_URL = "notify.html";
 const OFFSETS_URL = "offsets/offsets.json";
 const DEFAULT_LISTENER_PORT = "9026";
 
-const run = document.getElementById("run");
+const jailbreak = document.getElementById("jailbreak");
+const payloadsBtn = document.getElementById("payloads-btn");
 const msg = document.getElementById("msg");
 const ipVal = document.getElementById("ip-val");
 const portVal = document.getElementById("port-val");
+const payloadModal = document.getElementById("payload-modal");
+const payloadList = document.getElementById("payload-list");
+const closeModal = document.getElementById("close-modal");
+
+const BUILTIN_PAYLOADS = [
+    { file: "kstuff.elf", name: "Kstuff (Kernel Exploit)", desc: "Kernel exploit up to 13.60 — fpkg, homebrew, debug", icon: "🔓", color: "#16c60c" },
+    { file: "elfldr-ps5-1360.elf", name: "ELF Loader", desc: "Load custom ELF payloads from USB/host", icon: "📦", color: "#00e5ff" },
+    { file: "ftpsrv-ps5.elf", name: "FTP Server", desc: "File transfer over network (port 2121)", icon: "📁", color: "#ffab00" },
+    { file: "websrv-ps5.elf", name: "Web Server", desc: "HTTP file browser on PS5", icon: "🌐", color: "#4f7fd6" },
+    { file: "shsrv-ps5.elf", name: "Shell Server", desc: "Remote shell access via netcat", icon: "💻", color: "#ff6b6b" },
+    { file: "gdbsrv-ps5.elf", name: "GDB Server", desc: "Kernel/userspace debugging via GDB", icon: "🐛", color: "#c084fc" },
+    { file: "klogsrv-ps5.elf", name: "Kernel Log Server", desc: "Capture kernel dmesg/logs over network", icon: "📋", color: "#8b5cf6" },
+    { file: "hello_world.elf", name: "Hello World", desc: "Test payload — shows notification", icon: "👋", color: "#66ffa6" },
+    { file: "PLK.elf", name: "PLK (PS5Link)", desc: "PS5Link server for app debugging", icon: "🔗", color: "#f472b6" },
+    { file: "shadowmountplus.elf", name: "ShadowMount+", desc: "Mount games/backups from USB/network", icon: "💾", color: "#fbbf24" },
+];
 
 function isIPv4(str) {
     if (!str || typeof str !== "string") return false;
@@ -278,14 +345,18 @@ fetch(OFFSETS_URL, { cache: "no-store" })
             } else {
                 entry = { hc: [0x1e0d8], gd: "0x1d11a", nt: "0x4740", gps: "0x34f57b8", gpe: "0x1b280", cls: "0x34f57a8", cle: "0x26e70", ers: "0x34f57b0", ere: "0xf340" };
             }
-            run.classList.remove("disabled");
+            jailbreak.classList.remove("disabled");
+            payloadsBtn.classList.remove("disabled");
+            renderPayloadList();
             return;
         }
 
         entry = data[fw];
         if (entry) {
             msg.innerHTML = `firmware <b style="color: #ffffff; font-weight: bold;">${fw}</b> detected & supported`;
-            run.classList.remove("disabled");
+            jailbreak.classList.remove("disabled");
+            payloadsBtn.classList.remove("disabled");
+            renderPayloadList();
             return;
         }
 
@@ -293,7 +364,9 @@ fetch(OFFSETS_URL, { cache: "no-store" })
         if (near) {
             entry = data[near];
             msg.innerHTML = `<b style="color: #ffffff; font-weight: bold;">${fw}</b>: no exact offsets, trying <b style="color: #ffffff; font-weight: bold;">${near}</b> (unverified)`;
-            run.classList.remove("disabled");
+            jailbreak.classList.remove("disabled");
+            payloadsBtn.classList.remove("disabled");
+            renderPayloadList();
         } else {
             msg.innerHTML = `firmware <b style="color: #ffffff; font-weight: bold;">${fw}</b> not supported`;
         }
@@ -301,15 +374,15 @@ fetch(OFFSETS_URL, { cache: "no-store" })
     .catch(function () {
         msg.textContent = "failed to load offsets (demo fallback active)";
         entry = { hc: [0x1e0d8], gd: "0x1d11a", nt: "0x4740", gps: "0x34f57b8", gpe: "0x1b280", cls: "0x34f57a8", cle: "0x26e70", ers: "0x34f57b0", ere: "0xf340" };
-        run.classList.remove("disabled");
+        jailbreak.classList.remove("disabled");
+        payloadsBtn.classList.remove("disabled");
+        renderPayloadList();
     });
 
-run.addEventListener("click", function () {
+function sendExploit(payloadFile) {
     if (!entry) return;
-
     const infoCard = document.querySelector(".info-card");
     if (infoCard) infoCard.style.display = "block";
-
     if (msg) msg.textContent = `Initializing launcher parameters...`;
 
     const q = new URLSearchParams();
@@ -329,9 +402,92 @@ run.addEventListener("click", function () {
     if (entry.ers) q.set("ers", entry.ers);
     if (entry.ere) q.set("ere", entry.ere);
 
+    if (payloadFile) {
+        q.set("payload", payloadFile);
+    }
+
     setTimeout(() => {
         location.href = `${EXPLOIT_URL}?${q.toString()}`;
     }, 200);
+}
+
+jailbreak.addEventListener("click", function () {
+    sendExploit(null);
+});
+
+function renderPayloadList() {
+    payloadList.innerHTML = "";
+    BUILTIN_PAYLOADS.forEach(p => {
+        const item = document.createElement("div");
+        item.className = "payload-item";
+        item.innerHTML = `
+            <span class="payload-icon" style="color: ${p.color}">${p.icon}</span>
+            <div class="payload-info">
+                <div class="payload-name">${p.name}</div>
+                <div class="payload-desc">${p.desc}</div>
+            </div>
+            <button class="payload-btn" data-file="${p.file}">SEND</button>
+        `;
+        const btn = item.querySelector(".payload-btn");
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            sendPayload(p.file, btn);
+        });
+        payloadList.appendChild(item);
+    });
+}
+
+async function sendPayload(payloadFile, btn) {
+    btn.classList.add("sending");
+    btn.textContent = "SENDING...";
+    try {
+        const res = await fetch(`payloads/${payloadFile}`);
+        if (!res.ok) throw new Error(`File not found: ${payloadFile}`);
+        const data = await res.arrayBuffer();
+        if (msg) msg.textContent = `Sending ${payloadFile} to ${targetHost}:${listenerPort}...`;
+        await fetch(`http://${targetHost}:${listenerPort}`, {
+            method: "POST",
+            mode: "no-cors",
+            body: data
+        });
+        if (msg) msg.textContent = `Payload sent! Check PS5.`;
+        btn.textContent = "SENT!";
+        btn.style.background = "#16c60c";
+        setTimeout(() => {
+            btn.classList.remove("sending");
+            btn.textContent = "SEND";
+            btn.style.background = "";
+        }, 2000);
+    } catch (err) {
+        if (msg) msg.textContent = `Error: ${err.message}`;
+        btn.textContent = "FAILED";
+        btn.style.background = "#e74856";
+        setTimeout(() => {
+            btn.classList.remove("sending");
+            btn.textContent = "SEND";
+            btn.style.background = "";
+        }, 3000);
+    }
+}
+
+payloadsBtn.addEventListener("click", function () {
+    payloadModal.classList.add("open");
+});
+
+closeModal.addEventListener("click", function () {
+    payloadModal.classList.remove("open");
+});
+
+payloadModal.addEventListener("click", function (e) {
+    if (e.target === payloadModal) {
+        payloadModal.classList.remove("open");
+    }
+});
+
+document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && payloadModal.classList.contains("open")) {
+        payloadModal.classList.remove("open");
+    }
 });
 </script>
 </body>
