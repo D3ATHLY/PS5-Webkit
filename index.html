@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>PS5 Launcher</title>
+<title>PS5 Jailbreak Launcher</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body {
@@ -14,6 +14,26 @@ body {
 #cat { 
     width:240px; max-width:66vw; border-radius:12px; margin-bottom:20px;
     box-shadow:0 0 0 2px #2a2a2e, 0 0 22px 4px #2a2a2e; object-fit: cover;
+    transition: box-shadow 0.4s ease, transform 0.4s ease;
+}
+#cat.run { animation: pulse 1.1s ease-in-out infinite; }
+#cat.ok {
+    border-color: #16c60c;
+    box-shadow: 0 0 0 2px #16c60c, 0 0 40px 10px rgba(22,198,12,0.75);
+    animation: escapeSandbox 1.5s ease-out forwards;
+}
+#cat.failed { border-color: #e74856; box-shadow: 0 0 0 2px #e74856, 0 0 34px 8px rgba(231,72,86,0.6); animation: none; }
+@keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 2px #35507a, 0 0 16px 3px rgba(53,80,122,0.5); }
+    50%     { box-shadow: 0 0 0 2px #4f7fd6, 0 0 30px 8px rgba(79,127,214,0.7); }
+}
+@keyframes escapeSandbox {
+    0% { transform: scale(1) translateY(0) rotate(0deg); }
+    20% { transform: scale(1.1) translateY(-10px) rotate(-2deg); }
+    40% { transform: scale(1.05) translateY(-5px) rotate(2deg); }
+    60% { transform: scale(1.2) translateY(-20px) rotate(-5deg); box-shadow: 0 20px 40px rgba(0,0,0,0.8), 0 0 40px 10px rgba(22,198,12,0.75); }
+    80% { transform: scale(1.3) translateY(-30px) rotate(3deg); box-shadow: 0 30px 60px rgba(0,0,0,0.9), 0 0 50px 15px rgba(22,198,12,0.9); z-index: 100; position: relative; }
+    100% { transform: scale(1) translateY(0) rotate(0deg); z-index: 100; position: relative; }
 }
 .info-card {
     background: #16161e; border: 1px solid #2a2a35; border-radius: 12px;
@@ -49,7 +69,13 @@ body {
 .btn.disabled { opacity:0.4; pointer-events:none; }
 .btn.secondary { background-color:#1a1a2e; }
 .btn.secondary:hover:not(.disabled) { background-color:#4f7fd6; color:#fff; }
+.btn.running { background: linear-gradient(90deg, #1a1a2e, #2a2a3e); animation: btnPulse 1.5s ease-in-out infinite; }
+@keyframes btnPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(79,127,214,0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(79,127,214,0); }
+}
 #msg { color:#888; font-size:0.8rem; margin-top:14px; min-height:1.2em; text-align: center; }
+#progress { color:#00e5ff; font-size:0.75rem; margin-top:8px; min-height:1.2em; text-align: center; font-family: monospace; }
 .btn-group { display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
 .modal-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -70,6 +96,7 @@ body {
     cursor: pointer; transition: all 0.2s ease;
 }
 .payload-item:hover { background: #2a2b3d; border-color: #4f7fd6; }
+.payload-item.disabled { opacity: 0.5; pointer-events: none; }
 .payload-icon { font-size: 1.8rem; width: 48px; text-align: center; }
 .payload-info { flex: 1; }
 .payload-name { color: #fff; font-weight: 700; font-size: 1.1rem; margin-bottom: 4px; }
@@ -81,19 +108,32 @@ body {
 }
 .payload-btn:hover { background: #66ffb3; }
 .payload-btn.sending { background: #ffab00; cursor: wait; }
+.payload-btn.disabled { opacity: 0.4; cursor: not-allowed; }
 .close-modal {
     width: 100%; margin-top: 16px; padding: 12px; background: #2a2a35;
     color: #fff; border: 1px solid #4f7fd6; border-radius: 8px;
     font-weight: 700; cursor: pointer; font-size: 1rem;
 }
 .close-modal:hover { background: #4f7fd6; }
+.stage-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; font-weight: bold; text-transform: uppercase;
+    margin-left: 8px; vertical-align: middle;
+}
+.stage-badge.webkit { background: #4f7fd6; color: #fff; }
+.stage-badge.elfldr { background: #00e5ff; color: #121216; }
+.stage-badge.kernel { background: #ffab00; color: #121216; }
+.stage-badge.verify { background: #c084fc; color: #121216; }
+.stage-badge.complete { background: #16c60c; color: #121216; }
+.stage-badge.failed { background: #e74856; color: #fff; }
+.stage-badge.idle { background: #3a3a4d; color: #8a8a9e; }
 </style>
 </head>
 <body>
 
-<img id="cat" src="purple-dragon-bjdfl14c25o2xcs7.jpg" alt="Purple Dragon Mascot">
+<img id="cat" src="purple-dragon-bjdfl14c25o2xcs7.jpg" alt="PS5 Jailbreak">
 
-<div class="info-card">
+<div class="info-card" id="info-card">
     <div class="info-row">
         <span>Target Host:</span>
         <span class="info-val editable" id="ip-val" title="Click to edit LAN IP">Detecting...</span>
@@ -105,45 +145,50 @@ body {
 </div>
 
 <div class="btn-group">
-    <a tabindex="0" class="btn disabled" id="jailbreak">JAILBREAK</a>
+    <a tabindex="0" class="btn disabled" id="jailbreak">JAILBREAK <span class="stage-badge idle" id="jailbreak-stage">IDLE</span></a>
     <a tabindex="0" class="btn secondary disabled" id="payloads-btn">PAYLOADS</a>
 </div>
 <div id="msg"></div>
+<div id="progress"></div>
 
 <div class="modal-overlay" id="payload-modal">
     <div class="modal">
-        <h2>Built-in Payloads</h2>
+        <h2>Built-in Payloads <span class="stage-badge" id="payloads-status">LOCKED</span></h2>
         <div class="payload-list" id="payload-list"></div>
         <button class="close-modal" id="close-modal">Close</button>
     </div>
 </div>
 
+<script src="exploit_chain.js"></script>
 <script>
 "use strict";
-const EXPLOIT_URL = "notify.html";
 const OFFSETS_URL = "offsets/offsets.json";
 const DEFAULT_LISTENER_PORT = "9026";
 
 const jailbreak = document.getElementById("jailbreak");
 const payloadsBtn = document.getElementById("payloads-btn");
 const msg = document.getElementById("msg");
+const progress = document.getElementById("progress");
 const ipVal = document.getElementById("ip-val");
 const portVal = document.getElementById("port-val");
 const payloadModal = document.getElementById("payload-modal");
 const payloadList = document.getElementById("payload-list");
 const closeModal = document.getElementById("close-modal");
+const jailbreakStage = document.getElementById("jailbreak-stage");
+const payloadsStatus = document.getElementById("payloads-status");
+const cat = document.getElementById("cat");
 
 const BUILTIN_PAYLOADS = [
-    { file: "kstuff.elf", name: "Kstuff (Kernel Exploit)", desc: "Kernel exploit up to 13.60 — fpkg, homebrew, debug", icon: "🔓", color: "#16c60c" },
-    { file: "elfldr-ps5-1360.elf", name: "ELF Loader", desc: "Load custom ELF payloads from USB/host", icon: "📦", color: "#00e5ff" },
-    { file: "ftpsrv-ps5.elf", name: "FTP Server", desc: "File transfer over network (port 2121)", icon: "📁", color: "#ffab00" },
-    { file: "websrv-ps5.elf", name: "Web Server", desc: "HTTP file browser on PS5", icon: "🌐", color: "#4f7fd6" },
-    { file: "shsrv-ps5.elf", name: "Shell Server", desc: "Remote shell access via netcat", icon: "💻", color: "#ff6b6b" },
-    { file: "gdbsrv-ps5.elf", name: "GDB Server", desc: "Kernel/userspace debugging via GDB", icon: "🐛", color: "#c084fc" },
-    { file: "klogsrv-ps5.elf", name: "Kernel Log Server", desc: "Capture kernel dmesg/logs over network", icon: "📋", color: "#8b5cf6" },
-    { file: "hello_world.elf", name: "Hello World", desc: "Test payload — shows notification", icon: "👋", color: "#66ffa6" },
-    { file: "PLK.elf", name: "PLK (PS5Link)", desc: "PS5Link server for app debugging", icon: "🔗", color: "#f472b6" },
-    { file: "shadowmountplus.elf", name: "ShadowMount+", desc: "Mount games/backups from USB/network", icon: "💾", color: "#fbbf24" },
+    { file: "kstuff.elf", name: "Kstuff (Kernel Exploit)", desc: "Kernel exploit up to 13.60 — fpkg, homebrew, debug", icon: "🔓", color: "#16c60c", port: 9020 },
+    { file: "elfldr-ps5-1360.elf", name: "ELF Loader", desc: "Load custom ELF payloads from USB/host", icon: "📦", color: "#00e5ff", port: 9026 },
+    { file: "ftpsrv-ps5.elf", name: "FTP Server", desc: "File transfer over network (port 2121)", icon: "📁", color: "#ffab00", port: 2121 },
+    { file: "websrv-ps5.elf", name: "Web Server", desc: "HTTP file browser on PS5", icon: "🌐", color: "#4f7fd6", port: 8080 },
+    { file: "shsrv-ps5.elf", name: "Shell Server", desc: "Remote shell access via netcat", icon: "💻", color: "#ff6b6b", port: 9022 },
+    { file: "gdbsrv-ps5.elf", name: "GDB Server", desc: "Kernel/userspace debugging via GDB", icon: "🐛", color: "#c084fc", port: 9023 },
+    { file: "klogsrv-ps5.elf", name: "Kernel Log Server", desc: "Capture kernel dmesg/logs over network", icon: "📋", color: "#8b5cf6", port: 9024 },
+    { file: "hello_world.elf", name: "Hello World", desc: "Test payload — shows notification", icon: "👋", color: "#66ffa6", port: 9026 },
+    { file: "PLK.elf", name: "PLK (PS5Link)", desc: "PS5Link server for app debugging", icon: "🔗", color: "#f472b6", port: 9025 },
+    { file: "shadowmountplus.elf", name: "ShadowMount+", desc: "Mount games/backups from USB/network", icon: "💾", color: "#fbbf24", port: 9027 },
 ];
 
 function isIPv4(str) {
@@ -183,8 +228,8 @@ function decodeMDNSSuffix(candidateStr) {
 
 let listenerPort = DEFAULT_LISTENER_PORT;
 let targetHost = "192.168.X.X";
+let isJailbroken = false;
 
-// 1. Check URL parameters
 const Q_PARAMS = new URLSearchParams(window.location.search);
 const qIp = Q_PARAMS.get("ip") || Q_PARAMS.get("host");
 const qPort = Q_PARAMS.get("port");
@@ -198,7 +243,6 @@ if (qIp && (isIPv4(qIp) || isPrivateLanIP(qIp))) {
     targetHost = qIp;
     hasExplicitIp = true;
 } else {
-    // 2. Check localStorage saved IP
     let savedIp = null;
     try { savedIp = localStorage.getItem("ps5_target_ip"); } catch (e) {}
     if (savedIp && isIPv4(savedIp)) {
@@ -223,7 +267,6 @@ function updateHostDisplay() {
 
 updateHostDisplay();
 
-// 3. WebRTC Local IPv4 & mDNS Detection
 (function detectLocalIP() {
     try {
         const PeerConnection = window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
@@ -272,7 +315,6 @@ updateHostDisplay();
     } catch (err) {}
 })();
 
-// Allow user to click/tap Target Host or Payload Port to manually set IP/Port
 if (ipVal) {
     ipVal.addEventListener("click", function() {
         const val = prompt("Enter PS5 / Target Host LAN IP:", targetHost);
@@ -301,10 +343,6 @@ if (portVal) {
     });
 }
 
-// Extract system software version - PS5 UA formats:
-// "Mozilla/5.0 (PlayStation 5; 13.20) AppleWebKit/..."
-// "Mozilla/5.0 (PlayStation 5 13.20) AppleWebKit/..."
-// "Mozilla/5.0 (PlayStation 5/13.20) AppleWebKit/..."
 const m = /PlayStation 5[\s\/;](\d+)\.(\d+)/.exec(navigator.userAgent);
 const fw = m ? `${m[1].padStart(2, "0")}.${m[2].padStart(2, "0")}` : null;
 
@@ -343,10 +381,9 @@ fetch(OFFSETS_URL, { cache: "no-store" })
             if (keys.length > 0) {
                 entry = data[keys[0]];
             } else {
-                entry = { hc: [0x1e0d8], gd: "0x1d11a", nt: "0x4740", gps: "0x34f57b8", gpe: "0x1b280", cls: "0x34f57a8", cle: "0x26e70", ers: "0x34f57b0", ere: "0xf340" };
+                entry = { hc: ["0x1e0d8", "0x1e320", "0x1f368"], gd: "0x1d11a", nt: "0x4740", gps: "0x34f57b8", gpe: "0x1b280", cls: "0x34f57a8", cle: "0x26e70", ers: "0x34f57b0", ere: "0xf340" };
             }
             jailbreak.classList.remove("disabled");
-            payloadsBtn.classList.remove("disabled");
             renderPayloadList();
             return;
         }
@@ -355,7 +392,6 @@ fetch(OFFSETS_URL, { cache: "no-store" })
         if (entry) {
             msg.innerHTML = `firmware <b style="color: #ffffff; font-weight: bold;">${fw}</b> detected & supported`;
             jailbreak.classList.remove("disabled");
-            payloadsBtn.classList.remove("disabled");
             renderPayloadList();
             return;
         }
@@ -365,7 +401,6 @@ fetch(OFFSETS_URL, { cache: "no-store" })
             entry = data[near];
             msg.innerHTML = `<b style="color: #ffffff; font-weight: bold;">${fw}</b>: no exact offsets, trying <b style="color: #ffffff; font-weight: bold;">${near}</b> (unverified)`;
             jailbreak.classList.remove("disabled");
-            payloadsBtn.classList.remove("disabled");
             renderPayloadList();
         } else {
             msg.innerHTML = `firmware <b style="color: #ffffff; font-weight: bold;">${fw}</b> not supported`;
@@ -373,84 +408,137 @@ fetch(OFFSETS_URL, { cache: "no-store" })
     })
     .catch(function () {
         msg.textContent = "failed to load offsets (demo fallback active)";
-        entry = { hc: [0x1e0d8], gd: "0x1d11a", nt: "0x4740", gps: "0x34f57b8", gpe: "0x1b280", cls: "0x34f57a8", cle: "0x26e70", ers: "0x34f57b0", ere: "0xf340" };
+        entry = { hc: ["0x1e0d8", "0x1e320", "0x1f368"], gd: "0x1d11a", nt: "0x4740", gps: "0x34f57b8", gpe: "0x1b280", cls: "0x34f57a8", cle: "0x26e70", ers: "0x34f57b0", ere: "0xf340" };
         jailbreak.classList.remove("disabled");
-        payloadsBtn.classList.remove("disabled");
         renderPayloadList();
     });
-
-function sendExploit(payloadFile) {
-    if (!entry) return;
-    const infoCard = document.querySelector(".info-card");
-    if (infoCard) infoCard.style.display = "block";
-    if (msg) msg.textContent = `Initializing launcher parameters...`;
-
-    const q = new URLSearchParams();
-    q.set("go", "1");
-    q.set("fw", fw || "demo");
-    q.set("ip", targetHost);
-    q.set("host", targetHost);
-    q.set("port", listenerPort);
-
-    if (entry.hc) q.set("hc", Array.isArray(entry.hc) ? entry.hc.join(",") : entry.hc);
-    if (entry.gd) q.set("gd", entry.gd);
-    if (entry.nt) q.set("notify", entry.nt);
-    if (entry.gps) q.set("gps", entry.gps);
-    if (entry.gpe) q.set("gpe", entry.gpe);
-    if (entry.cls) q.set("cls", entry.cls);
-    if (entry.cle) q.set("cle", entry.cle);
-    if (entry.ers) q.set("ers", entry.ers);
-    if (entry.ere) q.set("ere", entry.ere);
-
-    if (payloadFile) {
-        q.set("payload", payloadFile);
-    }
-
-    setTimeout(() => {
-        location.href = `${EXPLOIT_URL}?${q.toString()}`;
-    }, 200);
-}
-
-jailbreak.addEventListener("click", function () {
-    sendExploit(null);
-});
 
 function renderPayloadList() {
     payloadList.innerHTML = "";
     BUILTIN_PAYLOADS.forEach(p => {
         const item = document.createElement("div");
-        item.className = "payload-item";
+        item.className = "payload-item" + (isJailbroken ? "" : " disabled");
         item.innerHTML = `
             <span class="payload-icon" style="color: ${p.color}">${p.icon}</span>
             <div class="payload-info">
                 <div class="payload-name">${p.name}</div>
                 <div class="payload-desc">${p.desc}</div>
             </div>
-            <button class="payload-btn" data-file="${p.file}">SEND</button>
+            <button class="payload-btn" data-file="${p.file}" data-port="${p.port}" ${isJailbroken ? "" : "disabled"}>SEND</button>
         `;
         const btn = item.querySelector(".payload-btn");
         btn.addEventListener("click", (e) => {
             e.stopPropagation();
-            sendPayload(p.file, btn);
+            if (isJailbroken) sendPayload(p.file, p.port, btn);
         });
         payloadList.appendChild(item);
     });
 }
 
-async function sendPayload(payloadFile, btn) {
+function updatePayloadsUI() {
+    if (isJailbroken) {
+        payloadsBtn.classList.remove("disabled");
+        payloadsStatus.textContent = "READY";
+        payloadsStatus.className = "stage-badge complete";
+        document.querySelectorAll(".payload-item").forEach(item => item.classList.remove("disabled"));
+        document.querySelectorAll(".payload-btn").forEach(btn => btn.disabled = false);
+    } else {
+        payloadsBtn.classList.add("disabled");
+        payloadsStatus.textContent = "LOCKED";
+        payloadsStatus.className = "stage-badge idle";
+        document.querySelectorAll(".payload-item").forEach(item => item.classList.add("disabled"));
+        document.querySelectorAll(".payload-btn").forEach(btn => btn.disabled = true);
+    }
+}
+
+function updateStageBadge(stage) {
+    const stages = {
+        "idle": "IDLE",
+        "webkit_uaf": "WEBKIT UAF",
+        "elfldr_load": "ELFLDR LOAD",
+        "kernel_exploit": "KERNEL EXPLOIT",
+        "verify": "VERIFYING",
+        "complete": "JAILBROKEN",
+        "failed": "FAILED"
+    };
+    jailbreakStage.textContent = stages[stage] || stage.toUpperCase();
+    jailbreakStage.className = "stage-badge " + stage;
+}
+
+async function runJailbreak() {
+    if (isJailbroken) {
+        msg.textContent = "Already jailbroken!";
+        return;
+    }
+
+    if (!entry) {
+        msg.textContent = "Offsets not loaded yet.";
+        return;
+    }
+
+    jailbreak.classList.add("disabled", "running");
+    jailbreak.classList.remove("disabled");
+    cat.className = "run";
+    msg.textContent = "Starting full exploit chain...";
+    progress.textContent = "";
+    updateStageBadge("webkit_uaf");
+
+    try {
+        const result = await ExploitChain.runFullExploitChain((type, stage, detail) => {
+            if (type === "stage") {
+                updateStageBadge(stage);
+                msg.textContent = detail;
+                progress.textContent = "";
+            } else if (type === "detail") {
+                progress.textContent = detail;
+            }
+        });
+
+        if (result.success) {
+            isJailbroken = true;
+            cat.className = "ok";
+            jailbreak.classList.remove("running");
+            jailbreak.textContent = "JAILBROKEN";
+            jailbreak.classList.add("disabled");
+            msg.textContent = "JAILBREAK COMPLETE! Payloads unlocked.";
+            progress.textContent = "";
+            updateStageBadge("complete");
+            updatePayloadsUI();
+            try { localStorage.setItem("ps5_jailbroken", "1"); } catch (e) {}
+        } else {
+            cat.className = "failed";
+            jailbreak.classList.remove("running");
+            jailbreak.classList.remove("disabled");
+            msg.textContent = `Jailbreak failed: ${result.error}`;
+            progress.textContent = "";
+            updateStageBadge("failed");
+        }
+    } catch (error) {
+        cat.className = "failed";
+        jailbreak.classList.remove("running");
+        jailbreak.classList.remove("disabled");
+        msg.textContent = `Error: ${error.message}`;
+        progress.textContent = "";
+        updateStageBadge("failed");
+    }
+}
+
+jailbreak.addEventListener("click", runJailbreak);
+
+async function sendPayload(payloadFile, payloadPort, btn) {
     btn.classList.add("sending");
     btn.textContent = "SENDING...";
     try {
         const res = await fetch(`payloads/${payloadFile}`);
         if (!res.ok) throw new Error(`File not found: ${payloadFile}`);
         const data = await res.arrayBuffer();
-        if (msg) msg.textContent = `Sending ${payloadFile} to ${targetHost}:${listenerPort}...`;
-        await fetch(`http://${targetHost}:${listenerPort}`, {
+        msg.textContent = `Sending ${payloadFile} to ${targetHost}:${payloadPort}...`;
+        await fetch(`http://${targetHost}:${payloadPort}`, {
             method: "POST",
             mode: "no-cors",
             body: data
         });
-        if (msg) msg.textContent = `Payload sent! Check PS5.`;
+        msg.textContent = `Payload sent! Check PS5.`;
         btn.textContent = "SENT!";
         btn.style.background = "#16c60c";
         setTimeout(() => {
@@ -459,7 +547,7 @@ async function sendPayload(payloadFile, btn) {
             btn.style.background = "";
         }, 2000);
     } catch (err) {
-        if (msg) msg.textContent = `Error: ${err.message}`;
+        msg.textContent = `Error: ${err.message}`;
         btn.textContent = "FAILED";
         btn.style.background = "#e74856";
         setTimeout(() => {
@@ -471,6 +559,10 @@ async function sendPayload(payloadFile, btn) {
 }
 
 payloadsBtn.addEventListener("click", function () {
+    if (!isJailbroken) {
+        msg.textContent = "Jailbreak required first!";
+        return;
+    }
     payloadModal.classList.add("open");
 });
 
@@ -489,6 +581,18 @@ document.addEventListener("keydown", function (e) {
         payloadModal.classList.remove("open");
     }
 });
+
+try {
+    if (localStorage.getItem("ps5_jailbroken") === "1") {
+        isJailbroken = true;
+        cat.className = "ok";
+        jailbreak.textContent = "JAILBROKEN";
+        jailbreak.classList.add("disabled");
+        msg.textContent = "Previously jailbroken (persisted). Click PAYLOADS.";
+        updateStageBadge("complete");
+        updatePayloadsUI();
+    }
+} catch (e) {}
 </script>
 </body>
 </html>
